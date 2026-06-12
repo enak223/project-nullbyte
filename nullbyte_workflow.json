@@ -47,7 +47,7 @@
       "type": "n8n-nodes-base.xml",
       "typeVersion": 1,
       "position": [
-        128,
+        -96,
         -144
       ],
       "id": "4f2be7fa-701f-4232-8a64-546a401fb037",
@@ -136,12 +136,12 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        80,
+        288,
         48
       ],
       "id": "5142fc9b-69a4-4350-97df-7b193b46e2e6",
       "name": "HTTP Request1",
-      "executeOnce": false
+      "executeOnce": true
     },
     {
       "parameters": {
@@ -150,7 +150,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        256,
+        464,
         48
       ],
       "id": "b25b3b49-1ba3-49d5-91ab-feb77caf73b0",
@@ -193,12 +193,37 @@
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1.1,
       "position": [
-        -112,
+        0,
         48
       ],
       "id": "1c9676e5-2ddb-4d19-bd12-19e904ea4676",
       "name": "Wait",
       "webhookId": "b6fd9748-0aac-4a25-8117-c810713d75dc"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -160,
+        48
+      ],
+      "id": "d1603640-ca91-4572-9d78-7f8d50216fea",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "name": "Replace Me",
+      "typeVersion": 1,
+      "position": [
+        96,
+        256
+      ],
+      "id": "9eaf213d-f711-4835-88f1-749a3351604f",
+      "placeholder": true
     }
   ],
   "pinData": {},
@@ -267,7 +292,7 @@
       "main": [
         [
           {
-            "node": "Wait",
+            "node": "Loop Over Items",
             "type": "main",
             "index": 0
           }
@@ -317,6 +342,35 @@
           }
         ]
       ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Replace Me",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Replace Me": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "active": false,
@@ -324,7 +378,7 @@
     "executionOrder": "v1",
     "binaryMode": "separate"
   },
-  "versionId": "b564f168-7f8b-4ced-ade6-341c8dffd39a",
+  "versionId": "6a8fb63b-277a-47f0-ba15-ad7098e12339",
   "meta": {
     "instanceId": "2a2c072b2544679c21e34728aea326ae943580ea095f9845a1269124b81e2ae7"
   },
