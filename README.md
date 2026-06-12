@@ -601,20 +601,22 @@ Do not include any text outside the JSON object.
 
 | Phase | Feature | Status |
 |-------|---------|--------|
-| v0.1 | Nmap scan → XML parse → NVD query | 🔲 Planned |
-| v0.1 | n8n basic pipeline skeleton | 🔲 Planned |
+| v0.1 | Nmap scan → XML parse → NVD query | ✅ Complete |
+| v0.1 | n8n basic pipeline skeleton | ✅ Complete |
+| v0.1 | Claude AI CVE triage (HTTP Request node) | ✅ Complete |
+| v0.1 | Auto-generated Markdown remediation report | ✅ Complete |
+| v0.1 | Write report to disk + GitHub push | ✅ Complete |
 | v0.2 | OSV.dev cross-reference + deduplication | 🔲 Planned |
-| v0.2 | AI CVE Hunter Agent (Claude) | 🔲 Planned |
-| v0.3 | Auto-generated HTML remediation report | 🔲 Planned |
-| v0.3 | Email/Slack delivery | 🔲 Planned |
+| v0.2 | Loop Over Items — multi-CVE batch triage | 🔲 Planned |
+| v0.3 | Email/Slack report delivery | 🔲 Planned |
+| v0.3 | HTML report template | 🔲 Planned |
 | v0.4 | Wazuh custom rules + alert integration | 🔲 Planned |
 | v0.4 | Weekly cron schedule activation | 🔲 Planned |
 | v0.5 | CISA KEV catalog matching | 🔲 Planned |
 | v0.5 | Wazuh Vulnerability Module integration | 🔲 Planned |
 | v1.0 | Dashboard (Grafana / n8n UI) | 🔲 Future |
 | v1.0 | Historical trending — week-over-week delta | 🔲 Future |
-| v1.1 | Windows VM: Sysmon + Wazuh agent full coverage | 🔲 Future |
-| v1.2 | Nuclei scanner integration (templated CVE PoC) | 🔲 Future |
+| v1.2 | Nuclei scanner integration | 🔲 Future |
 | v1.3 | NullByte + GhostNet unified risk dashboard | 🔲 Future |
 
 ---
