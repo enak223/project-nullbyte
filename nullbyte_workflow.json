@@ -1,0 +1,334 @@
+{
+  "name": "NullByte - CVE Detection Pipeline",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -656,
+        -160
+      ],
+      "id": "9e657ffe-b344-46ec-a372-4dda58169c81",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "fileSelector": "/home/node/.n8n-files/nullbyte_scan.xml",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1.1,
+      "position": [
+        -432,
+        -144
+      ],
+      "id": "60c40802-51e1-4b9b-93d5-96287ccf5b46",
+      "name": "Read/Write Files from Disk"
+    },
+    {
+      "parameters": {
+        "operation": "xml",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        -240,
+        -144
+      ],
+      "id": "e2e45e1c-c82f-4454-a5fe-63fb127fb9ed",
+      "name": "Extract from File"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.xml",
+      "typeVersion": 1,
+      "position": [
+        128,
+        -144
+      ],
+      "id": "4f2be7fa-701f-4232-8a64-546a401fb037",
+      "name": "XML"
+    },
+    {
+      "parameters": {
+        "jsCode": "const binaryKey = Object.keys(items[0].binary || {})[0];\nconst buffer = await this.helpers.getBinaryDataBuffer(0, binaryKey);\nconst xml = buffer.toString('utf8');\n\nconst hosts = [];\nconst hostBlocks = xml.match(/<host[\\s\\S]*?<\\/host>/g) || [];\n\nfor (const block of hostBlocks) {\n  const ipMatch = block.match(/<address addr=\"([\\d.]+)\" addrtype=\"ipv4\"/);\n  if (!ipMatch) continue;\n  const ip = ipMatch[1];\n\n  const ports = [];\n  const portBlocks = block.match(/<port[\\s\\S]*?<\\/port>/g) || [];\n\n  for (const port of portBlocks) {\n    const stateMatch = port.match(/state state=\"(\\w+)\"/);\n    if (!stateMatch || stateMatch[1] !== 'open') continue;\n\n    const portidMatch = port.match(/portid=\"(\\d+)\"/);\n    const serviceMatch = port.match(/<service name=\"([^\"]+)\"[^>]*product=\"([^\"]*)\"[^>]*version=\"([^\"]*)\"/);\n    const serviceNameOnly = port.match(/<service name=\"([^\"]+)\"/);\n\n    ports.push({\n      port: portidMatch ? portidMatch[1] : 'unknown',\n      service: serviceMatch ? serviceMatch[1] : (serviceNameOnly ? serviceNameOnly[1] : 'unknown'),\n      product: serviceMatch ? serviceMatch[2] : '',\n      version: serviceMatch ? serviceMatch[3] : ''\n    });\n  }\n\n  hosts.push({ ip, ports });\n}\n\nif (hosts.length === 0) {\n  return [{ json: { debug: true, xmlLength: xml.length, xmlPreview: xml.substring(0, 300) } }];\n}\n\nreturn hosts.flatMap(host =>\n  host.ports.map(p => ({\n    json: {\n      ip: host.ip,\n      port: p.port,\n      service: p.service,\n      product: p.product,\n      version: p.version\n    }\n  }))\n);"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -656,
+        48
+      ],
+      "id": "9715a721-6e51-468b-9ac8-9b8013dc9e8e",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "url": "https://services.nvd.nist.gov/rest/json/cves/2.0",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "keywordSearch",
+              "value": "={{ $json.product }}"
+            },
+            {
+              "name": "resultsPerPage",
+              "value": "5"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -496,
+        48
+      ],
+      "id": "cf8c94d9-d002-43a5-89b6-1b54e0552d1b",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "jsCode": "const results = [];\n\nfor (const item of items) {\n  const vulns = item.json.vulnerabilities || [];\n\n  for (const v of vulns) {\n    const cve = v.cve;\n    const cveId = cve.id || '';\n    const description = (cve.descriptions || []).find(d => d.lang === 'en')?.value || '';\n\n    let cvssScore = null;\n    let severity = 'UNKNOWN';\n    try {\n      const metrics = cve.metrics?.cvssMetricV31?.[0]?.cvssData;\n      if (metrics) {\n        cvssScore = metrics.baseScore;\n        severity = metrics.baseSeverity;\n      }\n    } catch(e) {}\n\n    const claudePrompt = `CVE_REF:${cveId} | Description: ${description} | Severity: ${severity} | In 2-3 sentences: is this critical for a homelab? What is the recommended action?`;\n\n    results.push({\n      json: {\n        cveId,\n        description,\n        cvssScore,\n        severity,\n        published: cve.published,\n        claudePrompt,\n        httpBody: JSON.stringify({\n          model: \"claude-haiku-4-5-20251001\",\n          max_tokens: 300,\n          messages: [{ role: \"user\", content: claudePrompt }]\n        })\n      }\n    });\n  }\n}\n\nreturn results;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -320,
+        48
+      ],
+      "id": "4c709b5a-8fd8-467a-842a-dddef1cd7cec",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "YOUR_ANTHROPIC_API_KEY"
+            },
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ $json.httpBody }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        80,
+        48
+      ],
+      "id": "5142fc9b-69a4-4350-97df-7b193b46e2e6",
+      "name": "HTTP Request1",
+      "executeOnce": false
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.map(item => {\n  const text = item.json.content?.[0]?.text || 'No triage available';\n  \n  // Try to find CVE ID anywhere in the first 100 chars\n  const cveMatch = text.match(/CVE-\\d{4}-\\d+/);\n  const cveId = cveMatch ? cveMatch[0] : 'Unknown CVE';\n  const triage = text.trim();\n  \n  return {\n    json: { cveId, triage }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        256,
+        48
+      ],
+      "id": "b25b3b49-1ba3-49d5-91ab-feb77caf73b0",
+      "name": "Code in JavaScript2",
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const reportLines = [];\n\nreportLines.push('# NullByte CVE Triage Report');\nreportLines.push(`Generated: ${new Date().toISOString()}`);\nreportLines.push('---');\n\nfor (const item of items) {\n  const cveId = item.json.cveId || 'Unknown CVE';\n  const triage = item.json.triage || 'No triage available';\n\n  reportLines.push(`\\n## ${cveId}`);\n  reportLines.push(triage);\n  reportLines.push('---');\n}\n\nconst report = reportLines.join('\\n');\nconst binary = Buffer.from(report, 'utf8').toString('base64');\n\nreturn [{\n  json: { fileName: 'nullbyte_report.md' },\n  binary: {\n    report: {\n      data: binary,\n      mimeType: 'text/markdown',\n      fileName: 'nullbyte_report.md'\n    }\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -656,
+        256
+      ],
+      "id": "b2faf517-ffe0-47c7-98d1-eedcbacd3e1b",
+      "name": "Code in JavaScript3"
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "/home/node/.n8n-files/nullbyte_report.md",
+        "dataPropertyName": "report",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1.1,
+      "position": [
+        -480,
+        256
+      ],
+      "id": "375ceba8-447c-493c-8a1e-3c2f2b57b891",
+      "name": "Read/Write Files from Disk1"
+    },
+    {
+      "parameters": {
+        "amount": 10
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -112,
+        48
+      ],
+      "id": "1c9676e5-2ddb-4d19-bd12-19e904ea4676",
+      "name": "Wait",
+      "webhookId": "b6fd9748-0aac-4a25-8117-c810713d75dc"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Read/Write Files from Disk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read/Write Files from Disk": {
+      "main": [
+        [
+          {
+            "node": "Extract from File",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract from File": {
+      "main": [
+        [
+          {
+            "node": "XML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request1": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript2": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript3": {
+      "main": [
+        [
+          {
+            "node": "Read/Write Files from Disk1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "b564f168-7f8b-4ced-ade6-341c8dffd39a",
+  "meta": {
+    "instanceId": "2a2c072b2544679c21e34728aea326ae943580ea095f9845a1269124b81e2ae7"
+  },
+  "nodeGroups": [],
+  "id": "29GylMSqKMZx5NXX",
+  "tags": []
+}
