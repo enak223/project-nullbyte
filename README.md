@@ -597,6 +597,7 @@ Do not include any text outside the JSON object.
 
 ---
 
+
 ## 🗺️ Roadmap
 
 | Phase | Feature | Status |
@@ -611,17 +612,18 @@ Do not include any text outside the JSON object.
 | v0.2 | 65s Wait throttle — rate limit handling | ✅ Complete |
 | v0.2 | Email delivery via Gmail SMTP | ✅ Complete |
 | v0.3 | Weekly Schedule Trigger (Sunday 2AM) | ✅ Complete |
-| v0.4 | OSV.dev cross-reference + deduplication | 🔲 Planned |
-| v0.4 | HTML report template | 🔲 Planned |
-| v0.5 | Wazuh custom rules + alert integration | 🔲 Planned |
-| v0.5 | Weekly cron schedule activation | 🔲 Planned |
+| v0.4 | OSV.dev cross-reference + deduplication | ✅ Complete |
+| v0.4 | HTML report template | ✅ Complete |
+| v0.5 | Wazuh API authentication node (JWT) | ✅ Complete |
+| v0.5 | Wazuh active-response trigger (PUT /active-response) | ✅ Complete |
+| v0.5 | SSH Execute a Command node | ✅ Complete |
+| v0.5 | Wazuh custom rules + alert integration | ✅ Complete |
+| v0.5 | Full end-to-end pipeline test | ✅ Complete |
 | v0.6 | CISA KEV catalog matching | 🔲 Planned |
 | v1.0 | Dashboard (Grafana / n8n UI) | 🔲 Future |
 | v1.0 | Historical trending — week-over-week delta | 🔲 Future |
 | v1.2 | Nuclei scanner integration | 🔲 Future |
 | v1.3 | NullByte + GhostNet unified risk dashboard | 🔲 Future |
-
----
 
 ## 👤 Author
 
