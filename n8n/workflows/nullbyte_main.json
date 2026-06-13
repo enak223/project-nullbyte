@@ -1,0 +1,566 @@
+{
+  "name": "NullByte - CVE Detection Pipeline",
+  "nodes": [
+    {
+      "parameters": {
+        "fileSelector": "/home/node/.n8n-files/nullbyte_scan.xml",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1.1,
+      "position": [
+        -544,
+        -1152
+      ],
+      "id": "60c40802-51e1-4b9b-93d5-96287ccf5b46",
+      "name": "Read/Write Files from Disk"
+    },
+    {
+      "parameters": {
+        "operation": "xml",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        -368,
+        -1152
+      ],
+      "id": "e2e45e1c-c82f-4454-a5fe-63fb127fb9ed",
+      "name": "Extract from File"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.xml",
+      "typeVersion": 1,
+      "position": [
+        -176,
+        -1152
+      ],
+      "id": "4f2be7fa-701f-4232-8a64-546a401fb037",
+      "name": "XML"
+    },
+    {
+      "parameters": {
+        "jsCode": "const binaryKey = Object.keys(items[0].binary || {})[0];\nconst buffer = await this.helpers.getBinaryDataBuffer(0, binaryKey);\nconst xml = buffer.toString('utf8');\n\nconst hosts = [];\nconst hostBlocks = xml.match(/<host[\\s\\S]*?<\\/host>/g) || [];\n\nfor (const block of hostBlocks) {\n  const ipMatch = block.match(/<address addr=\"([\\d.]+)\" addrtype=\"ipv4\"/);\n  if (!ipMatch) continue;\n  const ip = ipMatch[1];\n\n  const ports = [];\n  const portBlocks = block.match(/<port[\\s\\S]*?<\\/port>/g) || [];\n\n  for (const port of portBlocks) {\n    const stateMatch = port.match(/state state=\"(\\w+)\"/);\n    if (!stateMatch || stateMatch[1] !== 'open') continue;\n\n    const portidMatch = port.match(/portid=\"(\\d+)\"/);\n    const serviceMatch = port.match(/<service name=\"([^\"]+)\"[^>]*product=\"([^\"]*)\"[^>]*version=\"([^\"]*)\"/);\n    const serviceNameOnly = port.match(/<service name=\"([^\"]+)\"/);\n\n    ports.push({\n      port: portidMatch ? portidMatch[1] : 'unknown',\n      service: serviceMatch ? serviceMatch[1] : (serviceNameOnly ? serviceNameOnly[1] : 'unknown'),\n      product: serviceMatch ? serviceMatch[2] : '',\n      version: serviceMatch ? serviceMatch[3] : ''\n    });\n  }\n\n  hosts.push({ ip, ports });\n}\n\nif (hosts.length === 0) {\n  return [{ json: { debug: true, xmlLength: xml.length, xmlPreview: xml.substring(0, 300) } }];\n}\n\nreturn hosts.flatMap(host =>\n  host.ports.map(p => ({\n    json: {\n      ip: host.ip,\n      port: p.port,\n      service: p.service,\n      product: p.product,\n      version: p.version\n    }\n  }))\n);"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -832,
+        -960
+      ],
+      "id": "9715a721-6e51-468b-9ac8-9b8013dc9e8e",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "jsCode": "const results = [];\nconst seen = new Set();\n\nfor (const item of items) {\n  const vulns = item.json.vulnerabilities || [];\n\n  for (const v of vulns) {\n    const cve = v.cve;\n    const cveId = cve.id || '';\n\n    // Skip duplicates\n    if (seen.has(cveId)) continue;\n    seen.add(cveId);\n\n    const description = (cve.descriptions || []).find(d => d.lang === 'en')?.value || '';\n\n    let cvssScore = null;\n    let severity = 'UNKNOWN';\n    try {\n      const metrics = cve.metrics?.cvssMetricV31?.[0]?.cvssData;\n      if (metrics) {\n        cvssScore = metrics.baseScore;\n        severity = metrics.baseSeverity;\n      }\n    } catch(e) {}\n\n    const claudePrompt = `CVE_REF:${cveId} | Description: ${description} | Severity: ${severity} | In 2-3 sentences: is this critical for a homelab? What is the recommended action?`;\n\n    results.push({\n      json: {\n        cveId,\n        description,\n        cvssScore,\n        severity,\n        published: cve.published,\n        claudePrompt,\n        httpBody: JSON.stringify({\n          model: \"claude-haiku-4-5-20251001\",\n          max_tokens: 300,\n          messages: [{ role: \"user\", content: claudePrompt }]\n        })\n      }\n    });\n  }\n}\n\nreturn results;z"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -496,
+        -960
+      ],
+      "id": "4c709b5a-8fd8-467a-842a-dddef1cd7cec",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "YOUR_ANTHROPIC_API_KEY"
+            },
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ $json.httpBody }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        336,
+        -1136
+      ],
+      "id": "5142fc9b-69a4-4350-97df-7b193b46e2e6",
+      "name": "HTTP Request1",
+      "executeOnce": false
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.map(item => {\n  const text = item.json.content?.[0]?.text || 'No triage available';\n  \n  // Try to find CVE ID anywhere in the first 100 chars\n  const cveMatch = text.match(/CVE-\\d{4}-\\d+/);\n  const cveId = cveMatch ? cveMatch[0] : 'Unknown CVE';\n  const triage = text.trim();\n  \n  return {\n    json: { cveId, triage }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        512,
+        -1136
+      ],
+      "id": "b25b3b49-1ba3-49d5-91ab-feb77caf73b0",
+      "name": "Code in JavaScript2",
+      "executeOnce": false
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\nconst severityColor = (triage) => {\n  if (!triage) return '#6b7280';\n  const t = triage.toLowerCase();\n  if (t.includes('critical')) return '#dc2626';\n  if (t.includes('high')) return '#ea580c';\n  if (t.includes('medium')) return '#d97706';\n  return '#16a34a';\n};\n\nconst severityBadge = (triage) => {\n  if (!triage) return 'UNKNOWN';\n  const t = triage.toLowerCase();\n  if (t.includes('critical')) return 'CRITICAL';\n  if (t.includes('high')) return 'HIGH';\n  if (t.includes('medium')) return 'MEDIUM';\n  return 'LOW';\n};\n\nconst rows = items.map(item => {\n  const cveId = item.json.cveId || 'Unknown CVE';\n  const triage = item.json.triage || 'No triage available';\n  const cvss = item.json.cvssScore ?? 'N/A';\n  const severity = item.json.severity || 'UNKNOWN';\n  const published = item.json.published ? item.json.published.split('T')[0] : 'N/A';\n  const osvConfirmed = item.json.osv_confirmed ? '✅ Yes' : '❌ No';\n  const color = severityColor(triage);\n  const badge = severityBadge(triage);\n\n  return `\n    <div class=\"cve-card\">\n      <div class=\"cve-header\">\n        <span class=\"cve-id\">${cveId}</span>\n        <span class=\"badge\" style=\"background:${color}\">${badge}</span>\n        ${item.json.osv_confirmed ? '<span class=\"osv-badge\">OSV Confirmed</span>' : ''}\n      </div>\n      <div class=\"cve-meta\">\n        <span>CVSS: <strong>${cvss}</strong></span>\n        <span>NVD Severity: <strong>${severity}</strong></span>\n        <span>Published: <strong>${published}</strong></span>\n        <span>OSV Cross-Ref: <strong>${osvConfirmed}</strong></span>\n      </div>\n      <div class=\"triage-text\">${triage.replace(/\\*\\*(.*?)\\*\\*/g, '<strong>$1</strong>').replace(/\\n/g, '<br>')}</div>\n    </div>\n  `;\n}).join('');\n\nconst html = `<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n  <title>NullByte CVE Triage Report</title>\n  <style>\n    * { box-sizing: border-box; margin: 0; padding: 0; }\n    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; padding: 2rem; }\n    .header { border-bottom: 2px solid #22d3ee; padding-bottom: 1.5rem; margin-bottom: 2rem; }\n    .header h1 { font-size: 2rem; color: #22d3ee; letter-spacing: 0.05em; }\n    .header p { color: #94a3b8; margin-top: 0.5rem; font-size: 0.9rem; }\n    .summary { display: flex; gap: 1rem; margin-bottom: 2rem; flex-wrap: wrap; }\n    .stat { background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 1rem 1.5rem; flex: 1; min-width: 120px; }\n    .stat .number { font-size: 2rem; font-weight: bold; color: #22d3ee; }\n    .stat .label { font-size: 0.8rem; color: #94a3b8; margin-top: 0.25rem; }\n    .cve-card { background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 1.5rem; margin-bottom: 1.5rem; }\n    .cve-header { display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap; }\n    .cve-id { font-size: 1.1rem; font-weight: bold; color: #f1f5f9; font-family: monospace; }\n    .badge { padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: bold; color: white; }\n    .osv-badge { padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: bold; background: #0891b2; color: white; }\n    .cve-meta { display: flex; gap: 1.5rem; font-size: 0.85rem; color: #94a3b8; margin-bottom: 1rem; flex-wrap: wrap; }\n    .cve-meta strong { color: #e2e8f0; }\n    .triage-text { font-size: 0.9rem; line-height: 1.7; color: #cbd5e1; border-left: 3px solid #334155; padding-left: 1rem; }\n    .footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid #334155; font-size: 0.8rem; color: #475569; text-align: center; }\n  </style>\n</head>\n<body>\n  <div class=\"header\">\n    <h1>⚡ NullByte CVE Triage Report</h1>\n    <p>Generated: ${new Date().toISOString()} | Pipeline: Automated Weekly Scan</p>\n  </div>\n\n  <div class=\"summary\">\n    <div class=\"stat\">\n      <div class=\"number\">${items.length}</div>\n      <div class=\"label\">CVEs Analyzed</div>\n    </div>\n    <div class=\"stat\">\n      <div class=\"number\">${items.filter(i => (i.json.triage||'').toLowerCase().includes('critical')).length}</div>\n      <div class=\"label\">Critical</div>\n    </div>\n    <div class=\"stat\">\n      <div class=\"number\">${items.filter(i => (i.json.triage||'').toLowerCase().includes('high')).length}</div>\n      <div class=\"label\">High</div>\n    </div>\n    <div class=\"stat\">\n      <div class=\"number\">${items.filter(i => i.json.osv_confirmed).length}</div>\n      <div class=\"label\">OSV Confirmed</div>\n    </div>\n  </div>\n\n  ${rows}\n\n  <div class=\"footer\">\n    NullByte — Automated CVE Detection & Triage | github.com/enak223/project-nullbyte\n  </div>\n</body>\n</html>`;\n\nconst binary = Buffer.from(html, 'utf8').toString('base64');\n\nreturn [{\n  json: { fileName: 'nullbyte_report.html' },\n  binary: {\n    report: {\n      data: binary,\n      mimeType: 'text/html',\n      fileName: 'nullbyte_report.html'\n    }\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        -1136
+      ],
+      "id": "b2faf517-ffe0-47c7-98d1-eedcbacd3e1b",
+      "name": "Code in JavaScript3"
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "/home/node/.n8n-files/nullbyte_report.md",
+        "dataPropertyName": "report",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1.1,
+      "position": [
+        240,
+        -912
+      ],
+      "id": "375ceba8-447c-493c-8a1e-3c2f2b57b891",
+      "name": "Read/Write Files from Disk1"
+    },
+    {
+      "parameters": {
+        "amount": 65
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        144,
+        -1136
+      ],
+      "id": "1c9676e5-2ddb-4d19-bd12-19e904ea4676",
+      "name": "Wait",
+      "webhookId": "b6fd9748-0aac-4a25-8117-c810713d75dc"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        32,
+        -960
+      ],
+      "id": "d1603640-ca91-4572-9d78-7f8d50216fea",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "name": "Replace Me",
+      "typeVersion": 1,
+      "position": [
+        -144,
+        -896
+      ],
+      "id": "9eaf213d-f711-4835-88f1-749a3351604f",
+      "placeholder": true
+    },
+    {
+      "parameters": {
+        "url": "https://services.nvd.nist.gov/rest/json/cves/2.0",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "keywordSearch",
+              "value": "={{ $json.product }}"
+            },
+            {
+              "name": "resultsPerPage",
+              "value": "1"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -672,
+        -960
+      ],
+      "id": "cf8c94d9-d002-43a5-89b6-1b54e0552d1b",
+      "name": "First HTTP Request"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "triggerAtHour": 2
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -928,
+        -1152
+      ],
+      "id": "c0958918-a9f4-4090-a05a-7b5d0209c5d2",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "fromEmail": "fl01097318@gmail.com",
+        "toEmail": "eliesk8ter@gmail.com",
+        "subject": "=NullByte CVE Triage Report - {{ $now.toISO() }}",
+        "html": "=Please find this week's CVE triage report attached.\n\nGenerated by NullByte Pipeline.",
+        "options": {
+          "attachments": "report"
+        }
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        400,
+        -912
+      ],
+      "id": "d5b9188b-a935-42e3-889f-abd6c73c3727",
+      "name": "Send an Email",
+      "webhookId": "9a05758d-341a-424c-9335-7c1a75c027be",
+      "credentials": {
+        "smtp": {
+          "id": "wHD3YNkPjH8hSp88",
+          "name": "SMTP account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "https://172.18.0.1:55000/active-response",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Wazuh Auth').first().json.data.token }}"
+            },
+            {
+              "name": "Content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"command\": \"restart-wazuh0\",\n  \"arguments\": [],\n  \"alert\": {\n    \"data\": {\n      \"srcip\": \"{{ $json.ip }}\"\n    }\n  }\n}",
+        "options": {
+          "allowUnauthorizedCerts": true
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        272,
+        -672
+      ],
+      "id": "e631f9d0-f13e-4eee-9442-af6846886ddc",
+      "name": "Wazuh Alert node"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.ssh",
+      "typeVersion": 1,
+      "position": [
+        560,
+        -912
+      ],
+      "id": "869c6241-49fa-4736-b844-38b7228b06be",
+      "name": "Execute a command",
+      "credentials": {
+        "sshPassword": {
+          "id": "ead40n1im1mGVoUd",
+          "name": "SSH Password account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://172.18.0.1:55000/security/user/authenticate",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "options": {
+          "allowUnauthorizedCerts": true
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        736,
+        -912
+      ],
+      "id": "9b7ce978-cb3a-4cfa-88bd-3ec42ae176b8",
+      "name": "Wazuh Auth",
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "uMai0ipkATYFAUWk",
+          "name": "wazuh"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst results = [];\n\nfor (const item of items) {\n  const cveId = item.json.cveId;\n  let osvData = null;\n\n  try {\n    const response = await fetch(`https://api.osv.dev/v1/vulns/${cveId}`);\n    if (response.ok) {\n      osvData = await response.json();\n    }\n  } catch (e) {\n    // OSV not available or CVE not found — continue\n  }\n\n  results.push({\n    json: {\n      ...item.json,\n      osv_confirmed: osvData !== null,\n      osv_severity: osvData?.severity?.[0]?.score ?? null,\n      osv_aliases: osvData?.aliases ?? [],\n      osv_modified: osvData?.modified ?? null,\n      osv_cross_referenced: true\n    }\n  });\n}\n\nreturn results;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -288,
+        -960
+      ],
+      "id": "490df74b-38e6-4254-bcfb-bd58a638c14e",
+      "name": "OSV Enrich"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Read/Write Files from Disk": {
+      "main": [
+        [
+          {
+            "node": "Extract from File",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract from File": {
+      "main": [
+        [
+          {
+            "node": "XML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "First HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "OSV Enrich",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request1": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript2": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript3": {
+      "main": [
+        [
+          {
+            "node": "Read/Write Files from Disk1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Replace Me",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Replace Me": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "First HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Read/Write Files from Disk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read/Write Files from Disk1": {
+      "main": [
+        [
+          {
+            "node": "Send an Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send an Email": {
+      "main": [
+        [
+          {
+            "node": "Execute a command",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a command": {
+      "main": [
+        [
+          {
+            "node": "Wazuh Auth",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wazuh Auth": {
+      "main": [
+        [
+          {
+            "node": "Wazuh Alert node",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OSV Enrich": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "a9abc513-d7d4-41e1-8530-acc47236daed",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "2a2c072b2544679c21e34728aea326ae943580ea095f9845a1269124b81e2ae7"
+  },
+  "nodeGroups": [],
+  "id": "29GylMSqKMZx5NXX",
+  "tags": []
+}
