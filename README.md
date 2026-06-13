@@ -606,14 +606,16 @@ Do not include any text outside the JSON object.
 | v0.1 | Claude AI CVE triage (HTTP Request node) | ✅ Complete |
 | v0.1 | Auto-generated Markdown remediation report | ✅ Complete |
 | v0.1 | Write report to disk + GitHub push | ✅ Complete |
-| v0.2 | OSV.dev cross-reference + deduplication | 🔲 Planned |
-| v0.2 | Loop Over Items — multi-CVE batch triage | 🔲 Planned |
-| v0.3 | Email/Slack report delivery | 🔲 Planned |
-| v0.3 | HTML report template | 🔲 Planned |
-| v0.4 | Wazuh custom rules + alert integration | 🔲 Planned |
-| v0.4 | Weekly cron schedule activation | 🔲 Planned |
-| v0.5 | CISA KEV catalog matching | 🔲 Planned |
-| v0.5 | Wazuh Vulnerability Module integration | 🔲 Planned |
+| v0.2 | CVE deduplication (seen Set) | ✅ Complete |
+| v0.2 | Loop Over Items — multi-CVE batch triage | ✅ Complete |
+| v0.2 | 65s Wait throttle — rate limit handling | ✅ Complete |
+| v0.2 | Email delivery via Gmail SMTP | ✅ Complete |
+| v0.3 | Weekly Schedule Trigger (Sunday 2AM) | ✅ Complete |
+| v0.4 | OSV.dev cross-reference + deduplication | 🔲 Planned |
+| v0.4 | HTML report template | 🔲 Planned |
+| v0.5 | Wazuh custom rules + alert integration | 🔲 Planned |
+| v0.5 | Weekly cron schedule activation | 🔲 Planned |
+| v0.6 | CISA KEV catalog matching | 🔲 Planned |
 | v1.0 | Dashboard (Grafana / n8n UI) | 🔲 Future |
 | v1.0 | Historical trending — week-over-week delta | 🔲 Future |
 | v1.2 | Nuclei scanner integration | 🔲 Future |
